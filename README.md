@@ -48,6 +48,7 @@ To install Rust, you can follow their documentation: https://www.rust-lang.org/e
 Once all requirements are met, you can build the plugin by executing the following command from the project root folder:
 
 ```
+export PKG_CONFIG_PATH="/usr/local/opt/libffi/lib/pkgconfig"
 cargo build
 export GST_PLUGIN_PATH=`pwd`/target/debug
 gst-inspect-1.0 ndi
