@@ -7,6 +7,7 @@ use gst::subclass::prelude::*;
 use gst_base;
 use gst_base::subclass::prelude::*;
 use std::sync::Mutex;
+use std::i32;
 
 use crate::ndisys::*;
 use crate::send::*;
@@ -83,7 +84,34 @@ impl ObjectSubclass for NdiVideoSink {
             "Ruben Gonzalez <rubenrua@teltek.es>, Daniel Vilar <daniel.peiteado@teltek.es>, Sebastian Dröge <sebastian@centricular.com>, Luke Moscrop <luke.moscrop@bbc.co.uk>",
         );
 
-        let caps = gst::Caps::new_any();
+        let caps = gst::Caps::new_simple(
+            "video/x-raw",
+            &[
+                (
+                    "format",
+                    &gst::List::new(&[
+                        &gst_video::VideoFormat::Uyvy.to_string(),
+                        &gst_video::VideoFormat::Yv12.to_string(),
+                        &gst_video::VideoFormat::Nv12.to_string(),
+                        &gst_video::VideoFormat::I420.to_string(),
+                        &gst_video::VideoFormat::Bgra.to_string(),
+                        &gst_video::VideoFormat::Bgrx.to_string(),
+                        &gst_video::VideoFormat::Rgba.to_string(),
+                        &gst_video::VideoFormat::Rgbx.to_string(),
+                    ]),
+                ),
+                ("width", &gst::IntRange::<i32>::new(0, i32::MAX)),
+                ("height", &gst::IntRange::<i32>::new(0, i32::MAX)),
+                (
+                    "framerate",
+                    &gst::FractionRange::new(
+                        gst::Fraction::new(0, 1),
+                        gst::Fraction::new(i32::MAX, 1),
+                    ),
+                ),
+            ],
+        );
+
         let sink_pad_template = gst::PadTemplate::new(
             "sink",
             gst::PadDirection::Sink,
@@ -100,7 +128,7 @@ impl ObjectSubclass for NdiVideoSink {
 impl ObjectImpl for NdiVideoSink {
     glib_object_impl!();
 
-    fn set_property(&self, obj: &glib::Object, id: usize, value: &glib::Value) {
+    fn set_property(&self, _obj: &glib::Object, id: usize, value: &glib::Value) {
         let prop = &PROPERTIES[id];
         match *prop {
             subclass::Property("ndi-name", ..) => {
