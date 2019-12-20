@@ -39,14 +39,17 @@ static PROPERTIES: [subclass::Property; 1] = [
     })
 ];
 
-enum State {
-    Stopped,
-    Started { sender: SendInstance },
+struct State {
+    video_info: Option<gst_video::VideoInfo>,
+    sender: Option<SendInstance>,
 }
 
 impl Default for State {
-    fn default() -> State {
-        State::Stopped
+    fn default() -> Self {
+        Self {
+            sender: None,
+            video_info: None
+        }
     }
 }
 
@@ -163,36 +166,22 @@ impl BaseSinkImpl for NdiVideoSink {
         let mut state = self.state.lock().unwrap();
         let settings = self.settings.lock().unwrap();
 
-        if let State::Started { .. } = *state {
-            unreachable!("ndivideosink already started");
-        }
 
         let sender = create_send_instance(settings.ndi_name.clone(), false, false);
-        *state = State::Started{ sender: sender.unwrap() };
+        state.sender = Some(sender.unwrap());
 
         Ok(())
     }
 
-    fn stop(&self, element: &gst_base::BaseSink) -> Result<(), gst::ErrorMessage> {
+    fn set_caps(&self, _element: &gst_base::BaseSink, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
         let mut state = self.state.lock().unwrap();
-        *state = State::Stopped;
-        gst_info!(self.cat, obj: element, "Stopped");
-
+        state.video_info = gst_video::VideoInfo::from_caps(caps);
         Ok(())
     }
 
     fn render(&self, element: &gst_base::BaseSink, buffer: &gst::Buffer,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
         let mut state = self.state.lock().unwrap();
-        let (sender) = match *state {
-            State::Started {
-                ref mut sender,
-            } => (sender),
-            State::Stopped => {
-                gst_element_error!(element, gst::CoreError::Failed, ["Not started yet"]);
-                return Err(gst::FlowError::Error);
-            }
-        };
 
         gst_trace!(self.cat, obj: element, "Rendering {:?}", buffer);
         let map = buffer.map_readable().ok_or_else(|| {
@@ -200,15 +189,23 @@ impl BaseSinkImpl for NdiVideoSink {
             gst::FlowError::Error
         })?;
 
-        let frame = create_ndi_send_video_frame(
-            1280,
-            720,
-            NDIlib_frame_format_type_e::NDIlib_frame_format_type_progressive,
-        )
-        .with_data(map.as_ref().to_vec(), 1280 * 4)
-        .build();
+        if let Some(ref video_info) = state.video_info {
+            //TODO: find better way to get stride out
+            let in_frame = gst_video::VideoFrameRef::from_buffer_ref_readable(buffer.as_ref(), &video_info).unwrap();
 
-        sender.send_video(frame.unwrap());
+            let frame = create_ndi_send_video_frame(
+                video_info.width() as i32,
+                video_info.height() as i32,
+                NDIlib_frame_format_type_e::NDIlib_frame_format_type_progressive,
+            )
+            .with_format(video_info.format())
+            .with_data(map.as_ref().to_vec(), in_frame.plane_stride()[0] as i32)
+            .build();
+
+            if let Some(ref mut sender) = state.sender {
+                sender.send_video(frame.unwrap());
+            }
+        }
 
         Ok(gst::FlowSuccess::Ok)
     }

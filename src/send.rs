@@ -39,6 +39,25 @@ impl NDISendVideoFrameBuilder {
         self
     }
 
+    pub fn with_format(mut self, video_format: gst_video::VideoFormat) -> Self {
+        //TODO: fix unreachable_patterns warning
+        let format = match video_format {
+            gst_video::VideoFormat::Uyvy => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_UYVY,
+            gst_video::VideoFormat::I420 => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_YV12,
+            gst_video::VideoFormat::Nv12 => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_NV12,
+            gst_video::VideoFormat::Yv12 => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_I420,
+            gst_video::VideoFormat::Bgra => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_BGRA,
+            gst_video::VideoFormat::Bgrx => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_BGRX,
+            gst_video::VideoFormat::Rgba => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_RGBA,
+            gst_video::VideoFormat::Rgbx => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_RGBX,
+            gst_video::VideoFormat::Uyvy => ndisys::NDIlib_FourCC_type_e::NDIlib_FourCC_type_UYVA,
+            _ => panic!("Unkown format"),
+        };
+
+        self.instance.FourCC = format;
+        self
+    }
+
     pub fn build(self) -> Result<NDISendVideoFrame, SendCreateError> {
         let mut res = NDISendVideoFrame {
             instance: self.instance,
