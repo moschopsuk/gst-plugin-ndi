@@ -102,20 +102,14 @@ impl ObjectImpl for NdiVideoSink {
 
     fn set_property(&self, obj: &glib::Object, id: usize, value: &glib::Value) {
         let prop = &PROPERTIES[id];
-        let basesrc = obj.downcast_ref::<gst_base::BaseSrc>().unwrap();
-
         match *prop {
             subclass::Property("ndi-name", ..) => {
                 let mut settings = self.settings.lock().unwrap();
-                let ndi_name = value.get();
-                gst_debug!(
-                    self.cat,
-                    obj: basesrc,
-                    "Changing ndi-name from {:?} to {:?}",
-                    settings.ndi_name,
-                    ndi_name,
-                );
-                settings.ndi_name = ndi_name.unwrap_or_else(|| DEFAULT_RECEIVER_NDI_NAME.clone());
+                let ndi_name = value
+                    .get()
+                    .unwrap_or_else(|| DEFAULT_RECEIVER_NDI_NAME.clone());
+                
+                settings.ndi_name = ndi_name;
             }
             _ => unimplemented!(),
         }
