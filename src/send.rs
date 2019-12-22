@@ -1,6 +1,7 @@
 use std::ffi::CString;
 use std::ptr::{null, null_mut};
 use std::os::raw::c_char;
+use std::mem::size_of;
 
 use super::*;
 
@@ -24,6 +25,12 @@ impl SendInstance {
             NDIlib_send_send_video_v2(self.instance, &frame.instance);
         }
     }
+
+    pub fn send_audio(&mut self, frame: NDISendAudioFrame) {
+        unsafe {
+            NDIlib_util_send_send_audio_interleaved_16s(self.instance, &frame.instance);
+        }
+    }
 }
 
 pub struct NDISendVideoFrameBuilder {
@@ -31,6 +38,13 @@ pub struct NDISendVideoFrameBuilder {
     metadata: Option<String>,
     data: Vec<u8>,
 }
+
+pub struct NDISendAudioFrameBuilder {
+    instance: NDIlib_audio_frame_interleaved_16s_t,
+    metadata: Option<String>,
+    data: Vec<u8>,
+}
+
 
 impl NDISendVideoFrameBuilder {
     pub fn with_data(mut self, data: Vec<u8>, line_stride: i32) -> Self {
@@ -93,9 +107,51 @@ pub fn create_ndi_send_video_frame(width: i32, height: i32, frame_type: NDIlib_f
     }
 }
 
+impl NDISendAudioFrameBuilder {
+    pub fn with_data(mut self, data: Vec<u8>) -> Self {
+        self.data = data;
+        self
+    }
+
+    pub fn build(self) -> Result<NDISendAudioFrame, SendCreateError> {
+        let mut res = NDISendAudioFrame {
+            instance: self.instance,
+            metadata: self.metadata,
+            data: self.data,
+        };
+
+        res.instance.no_samples = (res.data.len() / res.instance.no_channels as usize / size_of::<i16>()) as i32;
+        res.instance.p_data = res.data.as_mut_ptr() as *mut i16;
+
+        Ok(res)
+    }
+}
+
+pub fn create_ndi_send_audio_frame(sample_rate: i32, no_channels: i32) -> NDISendAudioFrameBuilder {
+    NDISendAudioFrameBuilder {
+        instance: NDIlib_audio_frame_interleaved_16s_t {
+            sample_rate: sample_rate,
+            no_channels: no_channels,
+            no_samples: 0,
+            p_data: null_mut(),
+            reference_level: 0,
+            timecode: NDIlib_send_timecode_synthesize,
+        },
+        metadata: None,
+        data: vec![],
+    }
+}   
+
 #[derive(Debug)]
 pub struct NDISendVideoFrame {
     instance: NDIlib_video_frame_v2_t,
+    metadata: Option<String>,
+    data: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct NDISendAudioFrame {
+    instance: NDIlib_audio_frame_interleaved_16s_t,
     metadata: Option<String>,
     data: Vec<u8>,
 }

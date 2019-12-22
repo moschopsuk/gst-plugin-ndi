@@ -18,6 +18,7 @@ mod ndivideosrc;
 pub mod receiver;
 mod ndivideosink;
 pub mod send;
+mod ndiaudiosink;
 
 use crate::ndi::*;
 use crate::ndisys::*;
@@ -42,6 +43,7 @@ fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     ndivideosrc::register(plugin)?;
     ndiaudiosrc::register(plugin)?;
     ndivideosink::register(plugin)?;
+    ndiaudiosink::register(plugin)?;
     Ok(())
 }
 

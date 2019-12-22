@@ -72,6 +72,10 @@ extern "C" {
         p_instance: NDIlib_send_instance_t,
         p_video_data: *const NDIlib_video_frame_v2_t
     );
+    pub fn NDIlib_util_send_send_audio_interleaved_16s(
+        p_instance: NDIlib_send_instance_t,
+        p_audio_data: *const NDIlib_audio_frame_interleaved_16s_t
+    );
 }
 
 pub type NDIlib_find_instance_t = *mut ::std::os::raw::c_void;

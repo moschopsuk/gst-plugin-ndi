@@ -9,7 +9,6 @@ use gst_base::subclass::prelude::*;
 use std::sync::Mutex;
 use std::i32;
 
-use crate::ndisys::*;
 use crate::send::*;
 
 use crate::DEFAULT_RECEIVER_NDI_NAME;
@@ -40,7 +39,7 @@ static PROPERTIES: [subclass::Property; 1] = [
 ];
 
 struct State {
-    video_info: Option<gst_video::VideoInfo>,
+    audio_info: Option<gst_audio::AudioInfo>,
     sender: Option<SendInstance>,
 }
 
@@ -48,19 +47,19 @@ impl Default for State {
     fn default() -> Self {
         Self {
             sender: None,
-            video_info: None
+            audio_info: None
         }
     }
 }
 
-pub(crate) struct NdiVideoSink {
+pub(crate) struct NdiAudioSink {
     cat: gst::DebugCategory,
     settings: Mutex<Settings>,
     state: Mutex<State>,
 }
 
-impl ObjectSubclass for NdiVideoSink {
-    const NAME: &'static str = "RsNDIVideoSink";
+impl ObjectSubclass for NdiAudioSink {
+    const NAME: &'static str = "RsNDIAudioSink";
     type ParentType = gst_base::BaseSink;
     type Instance = gst::subclass::ElementInstanceStruct<Self>;
     type Class = subclass::simple::ClassStruct<Self>;
@@ -70,9 +69,9 @@ impl ObjectSubclass for NdiVideoSink {
     fn new() -> Self {
         Self {
             cat: gst::DebugCategory::new(
-                "ndivideosink",
+                "ndiaudiosink",
                 gst::DebugColorFlags::empty(),
-                Some("NewTek NDI Video Sink"),
+                Some("NewTek NDI Audio Sink"),
             ),
             settings: Mutex::new(Default::default()),
             state: Mutex::new(Default::default()),
@@ -81,37 +80,23 @@ impl ObjectSubclass for NdiVideoSink {
 
     fn class_init(klass: &mut subclass::simple::ClassStruct<Self>) {
         klass.set_metadata(
-            "NewTek NDI Video Sink",
+            "NewTek NDI Audio Sink",
             "Sink",
-            "NewTek NDI video Sink",
+            "NewTek NDI Audio Sink",
             "Ruben Gonzalez <rubenrua@teltek.es>, Daniel Vilar <daniel.peiteado@teltek.es>, Sebastian Dröge <sebastian@centricular.com>, Luke Moscrop <luke.moscrop@bbc.co.uk>",
         );
 
         let caps = gst::Caps::new_simple(
-            "video/x-raw",
+            "audio/x-raw",
             &[
                 (
                     "format",
                     &gst::List::new(&[
-                        &gst_video::VideoFormat::Uyvy.to_string(),
-                        &gst_video::VideoFormat::Yv12.to_string(),
-                        &gst_video::VideoFormat::Nv12.to_string(),
-                        &gst_video::VideoFormat::I420.to_string(),
-                        &gst_video::VideoFormat::Bgra.to_string(),
-                        &gst_video::VideoFormat::Bgrx.to_string(),
-                        &gst_video::VideoFormat::Rgba.to_string(),
-                        &gst_video::VideoFormat::Rgbx.to_string(),
+                        &gst_audio::AudioFormat::S16le.to_string(),
                     ]),
                 ),
-                ("width", &gst::IntRange::<i32>::new(0, i32::MAX)),
-                ("height", &gst::IntRange::<i32>::new(0, i32::MAX)),
-                (
-                    "framerate",
-                    &gst::FractionRange::new(
-                        gst::Fraction::new(0, 1),
-                        gst::Fraction::new(i32::MAX, 1),
-                    ),
-                ),
+                ("rate", &gst::IntRange::<i32>::new(0, i32::MAX)),
+                ("channels", &gst::IntRange::<i32>::new(0, i32::MAX)),
             ],
         );
 
@@ -128,7 +113,7 @@ impl ObjectSubclass for NdiVideoSink {
     }
 }
 
-impl ObjectImpl for NdiVideoSink {
+impl ObjectImpl for NdiAudioSink {
     glib_object_impl!();
 
     fn set_property(&self, _obj: &glib::Object, id: usize, value: &glib::Value) {
@@ -159,9 +144,9 @@ impl ObjectImpl for NdiVideoSink {
     }
 }
 
-impl ElementImpl for NdiVideoSink {}
+impl ElementImpl for NdiAudioSink {}
 
-impl BaseSinkImpl for NdiVideoSink {
+impl BaseSinkImpl for NdiAudioSink {
     fn start(&self, _element: &gst_base::BaseSink) -> Result<(), gst::ErrorMessage> {
         let mut state = self.state.lock().unwrap();
         let settings = self.settings.lock().unwrap();
@@ -175,7 +160,7 @@ impl BaseSinkImpl for NdiVideoSink {
 
     fn set_caps(&self, _element: &gst_base::BaseSink, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
         let mut state = self.state.lock().unwrap();
-        state.video_info = gst_video::VideoInfo::from_caps(caps);
+        state.audio_info = gst_audio::AudioInfo::from_caps(caps);
         Ok(())
     }
 
@@ -189,21 +174,18 @@ impl BaseSinkImpl for NdiVideoSink {
             gst::FlowError::Error
         })?;
 
-        if let Some(ref video_info) = state.video_info {
-            //TODO: find better way to get stride out
-            let in_frame = gst_video::VideoFrameRef::from_buffer_ref_readable(buffer.as_ref(), &video_info).unwrap();
-
-            let frame = create_ndi_send_video_frame(
-                video_info.width() as i32,
-                video_info.height() as i32,
-                NDIlib_frame_format_type_e::NDIlib_frame_format_type_progressive,
+        if let Some(ref audio_info) = state.audio_info {
+            
+            let frame = create_ndi_send_audio_frame(
+                audio_info.rate() as i32,
+                audio_info.channels() as i32
             )
-            .with_format(video_info.format())
-            .with_data(map.as_ref().to_vec(), in_frame.plane_stride()[0] as i32)
+            .with_data(map.as_ref().to_vec())
             .build();
 
+
             if let Some(ref mut sender) = state.sender {
-                sender.send_video(frame.unwrap());
+                sender.send_audio(frame.unwrap());
             }
         }
 
@@ -214,8 +196,8 @@ impl BaseSinkImpl for NdiVideoSink {
 pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     gst::Element::register(
         Some(plugin),
-        "ndivideosink",
+        "ndiaudiosink",
         gst::Rank::None,
-        NdiVideoSink::get_type(),
+        NdiAudioSink::get_type(),
     )
 }
